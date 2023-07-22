@@ -10,12 +10,11 @@ import (
 type Table struct {
 	Records [][]string
 
-	file      *os.File
-	changed   chan bool
-	close     chan bool
-	closed    chan error
-	mutex     sync.Mutex
-	waitGroup sync.WaitGroup
+	file    *os.File
+	changed chan struct{}
+	close   chan struct{}
+	closed  chan error
+	mutex   sync.Mutex
 }
 
 func OpenTable(path string) (*Table, error) {
@@ -34,18 +33,25 @@ func OpenTable(path string) (*Table, error) {
 	t := &Table{
 		Records: records,
 		file:    file,
-		changed: make(chan bool),
+		changed: make(chan struct{}),
+		close:   make(chan struct{}),
+		closed:  make(chan error),
+		mutex:   sync.Mutex{},
 	}
-	// whenever changed, write to file
-	t.waitGroup.Add(1)
-	defer t.waitGroup.Wait()
+	return t, nil
+}
+
+func (t *Table) ListenChange() error {
 	go func() {
 		for {
 			select {
 			case <-t.changed:
 				writer := csv.NewWriter(t.file)
 				t.mutex.Lock()
-				if err := writer.WriteAll(records); err != nil {
+				if err := t.file.Truncate(0); err != nil {
+					log.Fatalln(err)
+				}
+				if err := writer.WriteAll(t.Records); err != nil {
 					log.Fatalln(err)
 				}
 				t.mutex.Unlock()
@@ -56,17 +62,12 @@ func OpenTable(path string) (*Table, error) {
 			}
 		}
 	}()
-	return t, nil
+	err := <-t.closed
+	return err
 }
 
-func (t *Table) Close() error {
-	t.close <- true
-	for {
-		select {
-		case err := <-t.closed:
-			return err
-		}
-	}
+func (t *Table) Close() {
+	t.close <- struct{}{}
 }
 
 func (t *Table) Select(col int, id string) ([]string, error) {
@@ -98,6 +99,7 @@ func (t *Table) Insert(value []string) error {
 	t.mutex.Lock()
 	t.Records = append(t.Records, value)
 	t.mutex.Unlock()
+	t.changed <- struct{}{}
 	return nil
 }
 
@@ -113,6 +115,7 @@ func (t *Table) Update(col int, id string, values []string) error {
 	}
 	t.Records[row] = values
 	t.mutex.Unlock()
+	t.changed <- struct{}{}
 	return nil
 }
 
@@ -126,6 +129,7 @@ func (t *Table) Delete(col int, id string) error {
 			t.Records[i] = t.Records[len(t.Records)-1]
 			t.Records = t.Records[:len(t.Records)-1]
 			t.mutex.Unlock()
+			t.changed <- struct{}{}
 			return nil
 		}
 	}

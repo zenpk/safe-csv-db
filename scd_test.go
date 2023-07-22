@@ -1,14 +1,22 @@
 package scd
 
-import "testing"
+import (
+	"log"
+	"testing"
+)
 
 func Test(t *testing.T) {
-	table, err := OpenTable("./temp.csv")
+	table, err := OpenTable("./test.csv")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(table.Records)
-	if err := table.Insert([]string{"name1", "id1", "1,2,3"}); err != nil {
+	go func() {
+		if err := table.ListenChange(); err != nil {
+			log.Fatalln(err)
+		}
+	}()
+	if err := table.Insert([]string{"name1", "id1", "1,2,3\""}); err != nil {
 		t.Fatal(err)
 	}
 	t.Log(table.Records)
@@ -35,4 +43,5 @@ func Test(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log(table.Records)
+	table.Close()
 }

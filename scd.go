@@ -81,6 +81,19 @@ func (t *Table) Select(col int, id string) ([]string, error) {
 	return make([]string, 0), nil
 }
 
+func (t *Table) SelectAll(col int, value string) ([][]string, error) {
+	res := make([][]string, 0)
+	for i := 0; i < len(t.Records); i++ {
+		if col >= len(t.Records[i]) {
+			return make([][]string, 0), FindOutOfIndex
+		}
+		if t.Records[i][col] == value {
+			res = append(res, t.Records[i])
+		}
+	}
+	return res, nil
+}
+
 func (t *Table) Insert(value []string) error {
 	t.mutex.Lock()
 	t.Records = append(t.Records, value)

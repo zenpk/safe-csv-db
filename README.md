@@ -29,7 +29,7 @@ go func() {
 table.Insert([]string{"a", "b", "c"})
 ```
 
-### Call by other functions
+### Call from other functions
 
 ```go
 func InitDb(ready, done chan struct{}) {

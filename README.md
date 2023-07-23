@@ -32,7 +32,7 @@ table.Insert([]string{"a", "b", "c"})
 ### Call by other functions
 
 ```go
-func InitDb(done, inited chan struct{}) {
+func InitDb(ready, done chan struct{}) {
     table1, err := OpenTable("./first.csv")
     defer table1.Close()
     
@@ -50,14 +50,16 @@ func InitDb(done, inited chan struct{}) {
             log.fatalln(err)
         }
     }()
-	
-    inited <- struct{}{}
+
+    ready <- struct{}{}
     <- done
 }
 
 func main() {
-    go InitDb(done, inited)
-    <- inited
+    ready := make(chan struct{})
+    done := make(chan struct{})
+    go InitDb(done, ready)
+    <- ready 
     // do something
     done <- struct{}{}
 }

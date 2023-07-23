@@ -51,6 +51,9 @@ func (t *Table) ListenChange() error {
 				if err := t.file.Truncate(0); err != nil {
 					log.Fatalln(err)
 				}
+				if _, err := t.file.Seek(0, 0); err != nil {
+					log.Fatalln(err)
+				}
 				if err := writer.WriteAll(t.Records); err != nil {
 					log.Fatalln(err)
 				}

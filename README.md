@@ -2,6 +2,8 @@
 
 Thread safe database using only CSV
 
+https://pkg.go.dev/github.com/zenpk/safe-csv-db
+
 ## Functions
 
 This package only supports `Select`, `SelectAll`, `Insert`, `Update` and `Delete`

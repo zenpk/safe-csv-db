@@ -17,6 +17,7 @@ type Table struct {
 	mutex   sync.Mutex
 }
 
+// OpenTable opens a table (csv file), if not exists then create
 func OpenTable(path string) (*Table, error) {
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
@@ -41,6 +42,8 @@ func OpenTable(path string) (*Table, error) {
 	return t, nil
 }
 
+// ListenChange listen to table change signal, whenever a change happens and the table is idle,
+// writes the records to the csv file. This function will return an error after the table is closed
 func (t *Table) ListenChange() error {
 	go func() {
 		for {
@@ -69,10 +72,13 @@ func (t *Table) ListenChange() error {
 	return err
 }
 
+// Close the table
 func (t *Table) Close() {
 	t.close <- struct{}{}
 }
 
+// Select a row by its id. The col refers to the index of the id column in the csv file,
+// starts from 0
 func (t *Table) Select(col int, id string) ([]string, error) {
 	for i := 0; i < len(t.Records); i++ {
 		if col >= len(t.Records[i]) {
@@ -85,6 +91,7 @@ func (t *Table) Select(col int, id string) ([]string, error) {
 	return make([]string, 0), nil
 }
 
+// SelectAll rows that has the specified value on the specified column
 func (t *Table) SelectAll(col int, value string) ([][]string, error) {
 	res := make([][]string, 0)
 	for i := 0; i < len(t.Records); i++ {
@@ -98,6 +105,7 @@ func (t *Table) SelectAll(col int, value string) ([][]string, error) {
 	return res, nil
 }
 
+// Insert a row to the table
 func (t *Table) Insert(value []string) error {
 	t.mutex.Lock()
 	t.Records = append(t.Records, value)
@@ -106,6 +114,7 @@ func (t *Table) Insert(value []string) error {
 	return nil
 }
 
+// Update a row based on its id, col and id work the same as Select
 func (t *Table) Update(col int, id string, values []string) error {
 	t.mutex.Lock()
 	row, err := t.find(col, id)
@@ -122,6 +131,7 @@ func (t *Table) Update(col int, id string, values []string) error {
 	return nil
 }
 
+// Delete a row based on its id, col and id work the same as Select
 func (t *Table) Delete(col int, id string) error {
 	for i := 0; i < len(t.Records); i++ {
 		if col >= len(t.Records[i]) {

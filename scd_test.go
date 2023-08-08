@@ -102,7 +102,7 @@ func Test(t *testing.T) {
 	}
 	t.Log(selectAll)
 
-	record1.Name = "updated abc"
+	record1.Name = "update abc"
 	if err := csv.Update(0, "1", record1); err != nil {
 		t.Fatal(err)
 	}
@@ -113,6 +113,35 @@ func Test(t *testing.T) {
 	t.Log(all)
 
 	if err := csv.Delete(0, "2"); err != nil {
+		t.Fatal(err)
+	}
+	all, err = csv.All()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(all)
+
+	record1.Name = "abc"
+	if err := csv.InsertAll([]Table{record1, record2, record3}); err != nil {
+		t.Fatal(err)
+	}
+	all, err = csv.All()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(all)
+
+	record2.Name = "update all abc"
+	if err := csv.UpdateAll(1, "abc", record2); err != nil {
+		t.Fatal(err)
+	}
+	all, err = csv.All()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(all)
+
+	if err := csv.DeleteAll(1, "def"); err != nil {
 		t.Fatal(err)
 	}
 	all, err = csv.All()

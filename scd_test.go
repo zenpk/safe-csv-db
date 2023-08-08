@@ -3,17 +3,18 @@ package scd
 import (
 	"errors"
 	"log"
+	"strconv"
 	"testing"
 )
 
 type TestTable struct {
-	Id   string
+	Id   int64
 	Name string
 }
 
 func (t TestTable) ToRow() ([]string, error) {
 	row := make([]string, 2)
-	row[0] = t.Id
+	row[0] = strconv.FormatInt(t.Id, 10)
 	row[1] = t.Name
 	return row, nil
 }
@@ -22,8 +23,12 @@ func (t TestTable) FromRow(row []string) (Table, error) {
 	if len(row) < 2 {
 		return nil, errors.New("out of range")
 	}
+	id, err := strconv.ParseInt(row[0], 10, 64)
+	if err != nil {
+		return nil, err
+	}
 	newTable := TestTable{
-		Id:   row[0],
+		Id:   id,
 		Name: row[1],
 	}
 	return newTable, nil
@@ -47,7 +52,7 @@ func Test(t *testing.T) {
 	t.Log(all)
 
 	record1 := TestTable{
-		Id:   "1",
+		Id:   1,
 		Name: "abc",
 	}
 	if err := csv.Insert(record1); err != nil {
@@ -60,7 +65,7 @@ func Test(t *testing.T) {
 	t.Log(all)
 
 	record2 := TestTable{
-		Id:   "2",
+		Id:   2,
 		Name: "abc",
 	}
 	if err := csv.Insert(record2); err != nil {
@@ -73,7 +78,7 @@ func Test(t *testing.T) {
 	t.Log(all)
 
 	record3 := TestTable{
-		Id:   "3",
+		Id:   3,
 		Name: "def",
 	}
 	if err := csv.Insert(record3); err != nil {

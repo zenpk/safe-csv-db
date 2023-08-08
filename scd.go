@@ -8,7 +8,9 @@ import (
 )
 
 type Table interface {
+	// ToRow converts a Table instance to []string, this should be defined by user
 	ToRow() ([]string, error)
+	// FromRow creates a Table instance from []string, this should be defined by user
 	FromRow(row []string) (Table, error)
 }
 
@@ -23,10 +25,10 @@ type Csv struct {
 }
 
 // OpenCsv opens a table (csv file), if not exists then create
-func OpenCsv(path string, table Table) (Csv, error) {
+func OpenCsv(path string, table Table) (*Csv, error) {
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		return Csv{}, err
+		return nil, err
 	}
 	reader := csv.NewReader(file)
 	rawRecords, err := reader.ReadAll()
@@ -34,9 +36,9 @@ func OpenCsv(path string, table Table) (Csv, error) {
 		if err := file.Close(); err != nil {
 			log.Fatalln(err)
 		}
-		return Csv{}, err
+		return nil, err
 	}
-	newCsv := Csv{
+	newCsv := &Csv{
 		table:      table,
 		rawRecords: rawRecords,
 		file:       file,
@@ -78,14 +80,31 @@ func (c *Csv) ListenChange() error {
 	return err
 }
 
-// Close the table
+// Close the table (csv file)
 func (c *Csv) Close() {
 	c.close <- struct{}{}
 }
 
-// Select a row by its id. The col refers to the index of the id column in the csv file,
-// starts from 0
+// All returns all rows
+func (c *Csv) All() ([]Table, error) {
+	res := make([]Table, 0)
+	c.mutex.Lock()
+	for i := 0; i < len(c.rawRecords); i++ {
+		table, err := c.table.FromRow(c.rawRecords[i])
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, table)
+	}
+	c.mutex.Unlock()
+	return res, nil
+}
+
+// Select a row by its id, if there are multiple rows with the same id, the first row will be returned
+// The col refers to the index of the id column in the csv file,
+// notice that the id must be converted to string in advance. The col starts from 0
 func (c *Csv) Select(col int, id string) (Table, error) {
+	c.mutex.Lock()
 	for i := 0; i < len(c.rawRecords); i++ {
 		if col >= len(c.rawRecords[i]) {
 			return nil, FindOutOfIndex
@@ -95,6 +114,7 @@ func (c *Csv) Select(col int, id string) (Table, error) {
 			if err != nil {
 				return nil, err
 			}
+			c.mutex.Unlock()
 			return table, nil
 		}
 	}
@@ -102,13 +122,14 @@ func (c *Csv) Select(col int, id string) (Table, error) {
 }
 
 // SelectAll rows that has the specified value on the specified column
-func (c *Csv) SelectAll(col int, value string) ([]Table, error) {
+func (c *Csv) SelectAll(col int, by string) ([]Table, error) {
 	res := make([]Table, 0)
+	c.mutex.Lock()
 	for i := 0; i < len(c.rawRecords); i++ {
 		if col >= len(c.rawRecords[i]) {
 			return nil, FindOutOfIndex
 		}
-		if c.rawRecords[i][col] == value {
+		if c.rawRecords[i][col] == by {
 			table, err := c.table.FromRow(c.rawRecords[i])
 			if err != nil {
 				return nil, err
@@ -116,23 +137,11 @@ func (c *Csv) SelectAll(col int, value string) ([]Table, error) {
 			res = append(res, table)
 		}
 	}
+	c.mutex.Unlock()
 	return res, nil
 }
 
-// All returns all rows
-func (c *Csv) All() ([]Table, error) {
-	res := make([]Table, 0)
-	for i := 0; i < len(c.rawRecords); i++ {
-		table, err := c.table.FromRow(c.rawRecords[i])
-		if err != nil {
-			return nil, err
-		}
-		res = append(res, table)
-	}
-	return res, nil
-}
-
-// Insert a row to the table
+// Insert a row into the table
 func (c *Csv) Insert(value Table) error {
 	rawRecord, err := value.ToRow()
 	if err != nil {
@@ -145,6 +154,23 @@ func (c *Csv) Insert(value Table) error {
 	return nil
 }
 
+// InsertAll rows into the table
+func (c *Csv) InsertAll(values []Table) error {
+	rawRecords := make([][]string, 0)
+	for _, value := range values {
+		rawRecord, err := value.ToRow()
+		if err != nil {
+			return err
+		}
+		rawRecords = append(rawRecords, rawRecord)
+	}
+	c.mutex.Lock()
+	c.rawRecords = append(c.rawRecords, rawRecords...)
+	c.mutex.Unlock()
+	c.changed <- struct{}{}
+	return nil
+}
+
 // Update a row based on its id, col and id work the same as Select
 func (c *Csv) Update(col int, id string, value Table) error {
 	rawRecord, err := value.ToRow()
@@ -152,28 +178,55 @@ func (c *Csv) Update(col int, id string, value Table) error {
 		return err
 	}
 	c.mutex.Lock()
-	row, err := c.find(col, id)
+	for i := 0; i < len(c.rawRecords); i++ {
+		if col >= len(c.rawRecords[i]) {
+			c.mutex.Unlock()
+			return FindOutOfIndex
+		}
+		if c.rawRecords[i][col] == id {
+			c.rawRecords[i] = rawRecord
+			c.mutex.Unlock()
+			c.changed <- struct{}{}
+			return nil
+		}
+	}
+	return ValueNotFound
+}
+
+// UpdateAll rows that has the specified value on the specified column, col and id work the same as Select
+func (c *Csv) UpdateAll(col int, by string, value Table) error {
+	rawRecord, err := value.ToRow()
 	if err != nil {
-		c.mutex.Unlock()
 		return err
 	}
-	if row < 0 {
-		return ValueNotFound
+	updated := false
+	c.mutex.Lock()
+	for i := 0; i < len(c.rawRecords); i++ {
+		if col >= len(c.rawRecords[i]) {
+			c.mutex.Unlock()
+			return FindOutOfIndex
+		}
+		if c.rawRecords[i][col] == by {
+			c.rawRecords[i] = rawRecord
+			updated = true
+		}
 	}
-	c.rawRecords[row] = rawRecord
 	c.mutex.Unlock()
-	c.changed <- struct{}{}
-	return nil
+	if updated {
+		c.changed <- struct{}{}
+		return nil
+	}
+	return ValueNotFound
 }
 
 // Delete a row based on its id, col and id work the same as Select
 func (c *Csv) Delete(col int, id string) error {
+	c.mutex.Lock()
 	for i := 0; i < len(c.rawRecords); i++ {
 		if col >= len(c.rawRecords[i]) {
 			return FindOutOfIndex
 		}
 		if c.rawRecords[i][col] == id {
-			c.mutex.Lock()
 			c.rawRecords[i] = c.rawRecords[len(c.rawRecords)-1]
 			c.rawRecords = c.rawRecords[:len(c.rawRecords)-1]
 			c.mutex.Unlock()
@@ -184,14 +237,24 @@ func (c *Csv) Delete(col int, id string) error {
 	return ValueNotFound
 }
 
-func (c *Csv) find(col int, id string) (int, error) {
-	for i := 0; i < len(c.rawRecords); i++ {
+// DeleteAll rows that has the specified value on the specified column, col and id work the same as Select
+func (c *Csv) DeleteAll(col int, by string) error {
+	deleted := false
+	c.mutex.Lock()
+	for i := len(c.rawRecords) - 1; i >= 0; i-- {
 		if col >= len(c.rawRecords[i]) {
-			return -1, FindOutOfIndex
+			return FindOutOfIndex
 		}
-		if c.rawRecords[i][col] == id {
-			return i, nil
+		if c.rawRecords[i][col] == by {
+			c.rawRecords[i] = c.rawRecords[len(c.rawRecords)-1]
+			c.rawRecords = c.rawRecords[:len(c.rawRecords)-1]
+			deleted = true
 		}
 	}
-	return -1, nil
+	c.mutex.Unlock()
+	if deleted {
+		c.changed <- struct{}{}
+		return nil
+	}
+	return ValueNotFound
 }

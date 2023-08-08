@@ -6,9 +6,19 @@ Thread safe database using only CSV
 
 ## Functions
 
-This package only supports `Select`, `SelectAll`, `All`, `Insert`, `Update` and `Delete`
+This package supports these functions
 
-Every row should have a unique id
+- `All`: SELECT *
+- `Select`: SELECT * BY LIMIT 1
+- `SelectAll`: SELECT * BY
+- `Insert`: Insert one row
+- `InsertAll`: Insert multiple rows
+- `Update`: Update one row by some value
+- `UpdateAll`: Update all rows by some value
+- `Delete`: Delete one row by some value
+- `DeleteAll`: Delete all rows by some value
+
+It is recommended that every row has a unique id
 
 All values are stored as `string`
 
@@ -19,42 +29,72 @@ For detailed API please refer to the go doc
 ### Basic
 
 ```go
+// define your table struct
 type My struct{
- id string
- name string
+    Id int64
+    Name string
 }
 
-csv, err := OpenTable("./test.csv")
-defer table.Close()
+// implement the Table interface
+func (m My) ToRow() ([]string, error) {
+    row := make([]string, 2)
+    row[0] = strconv.FormatInt(m.Id, 10)
+    row[1] = m.Name
+    return row, nil
+}
+
+func (m My) FromRow(row []string) (Table, error) {
+    if len(row) < 2 {
+        return nil, errors.New("out of range")
+    }
+    id, err := strconv.ParseInt(row[0], 10, 64)
+    if err != nil {
+        return nil, err
+    }
+    newTable := My{
+        Id:   id,
+        Name: row[1],
+    }
+    return newTable, nil
+}
+
+myCsv, err := OpenCsv("./test.csv", My{})
+defer myCsv.Close()
 
 go func() {
-    if err := table.ListenChange(); err != nil {
-        log.fatalln(err)
+    if err := myCsv.ListenChange(); err != nil {
+        log.Fatalln(err)
     }
 }()
 
-table.Insert([]string{"a", "b", "c"})
+record := My{
+    Id:   1,
+    Name: "abc",
+}
+if err := csv.Insert(record); err != nil {
+    log.Fatalln(err)
+}
 ```
 
 ### Call from other functions
 
 ```go
 func InitDb(ready, done chan struct{}) {
-    table1, err := OpenTable("./first.csv")
-    defer table1.Close()
+    userCsv, err := OpenCsv("./users.csv", User{})
+    defer userCsv.Close()
 
     go func() {
-        if err := table1.ListenChange(); err != nil {
-            log.fatalln(err)
+        if err := userCsv.ListenChange(); err != nil {
+            log.Fatalln(err)
         }
     }()
 
-    table2, err := OpenTable("./second.csv")
-    defer table2.Close()
+    articleCsv, err := OpenCsv("./articles.csv", Article{})
+    defer articleCsv.Close()
 
     go func() {
-        if err := table2.ListenChange(); err != nil {
-            log.fatalln(err)
+        if err := articleCsv.ListenChange(); err != nil {
+            log.Fatalln(err)
         }
     }()
 

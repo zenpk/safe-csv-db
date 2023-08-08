@@ -7,19 +7,19 @@ import (
 	"testing"
 )
 
-type TestTable struct {
+type TestRecordType struct {
 	Id   int64
 	Name string
 }
 
-func (t TestTable) ToRow() ([]string, error) {
+func (t TestRecordType) ToRow() ([]string, error) {
 	row := make([]string, 2)
 	row[0] = strconv.FormatInt(t.Id, 10)
 	row[1] = t.Name
 	return row, nil
 }
 
-func (t TestTable) FromRow(row []string) (Table, error) {
+func (t TestRecordType) FromRow(row []string) (RecordType, error) {
 	if len(row) < 2 {
 		return nil, errors.New("out of range")
 	}
@@ -27,7 +27,7 @@ func (t TestTable) FromRow(row []string) (Table, error) {
 	if err != nil {
 		return nil, err
 	}
-	newTable := TestTable{
+	newTable := TestRecordType{
 		Id:   id,
 		Name: row[1],
 	}
@@ -35,120 +35,120 @@ func (t TestTable) FromRow(row []string) (Table, error) {
 }
 
 func Test(t *testing.T) {
-	csv, err := OpenCsv("./test.csv", TestTable{})
+	table, err := OpenTable("./test.csv", TestRecordType{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	go func() {
-		if err := csv.ListenChange(); err != nil {
+		if err := table.ListenChange(); err != nil {
 			log.Fatalln(err)
 		}
 	}()
 
-	all, err := csv.All()
+	all, err := table.All()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(all)
 
-	record1 := TestTable{
+	record1 := TestRecordType{
 		Id:   1,
 		Name: "abc",
 	}
-	if err := csv.Insert(record1); err != nil {
+	if err := table.Insert(record1); err != nil {
 		t.Fatal(err)
 	}
-	all, err = csv.All()
+	all, err = table.All()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(all)
 
-	record2 := TestTable{
+	record2 := TestRecordType{
 		Id:   2,
 		Name: "abc",
 	}
-	if err := csv.Insert(record2); err != nil {
+	if err := table.Insert(record2); err != nil {
 		t.Fatal(err)
 	}
-	all, err = csv.All()
+	all, err = table.All()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(all)
 
-	record3 := TestTable{
+	record3 := TestRecordType{
 		Id:   3,
 		Name: "def",
 	}
-	if err := csv.Insert(record3); err != nil {
+	if err := table.Insert(record3); err != nil {
 		t.Fatal(err)
 	}
-	all, err = csv.All()
+	all, err = table.All()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(all)
 
-	select1, err := csv.Select(0, "1")
+	select1, err := table.Select(0, "1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(select1)
 
-	selectAll, err := csv.SelectAll(1, "abc")
+	selectAll, err := table.SelectAll(1, "abc")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(selectAll)
 
 	record1.Name = "update abc"
-	if err := csv.Update(0, "1", record1); err != nil {
+	if err := table.Update(0, "1", record1); err != nil {
 		t.Fatal(err)
 	}
-	all, err = csv.All()
+	all, err = table.All()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(all)
 
-	if err := csv.Delete(0, "2"); err != nil {
+	if err := table.Delete(0, "2"); err != nil {
 		t.Fatal(err)
 	}
-	all, err = csv.All()
+	all, err = table.All()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(all)
 
 	record1.Name = "abc"
-	if err := csv.InsertAll([]Table{record1, record2, record3}); err != nil {
+	if err := table.InsertAll([]RecordType{record1, record2, record3}); err != nil {
 		t.Fatal(err)
 	}
-	all, err = csv.All()
+	all, err = table.All()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(all)
 
 	record2.Name = "update all abc"
-	if err := csv.UpdateAll(1, "abc", record2); err != nil {
+	if err := table.UpdateAll(1, "abc", record2); err != nil {
 		t.Fatal(err)
 	}
-	all, err = csv.All()
+	all, err = table.All()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(all)
 
-	if err := csv.DeleteAll(1, "def"); err != nil {
+	if err := table.DeleteAll(1, "def"); err != nil {
 		t.Fatal(err)
 	}
-	all, err = csv.All()
+	all, err = table.All()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(all)
 
-	csv.Close()
+	table.Close()
 }

@@ -1,47 +1,120 @@
 package scd
 
 import (
+	"errors"
 	"log"
 	"testing"
 )
 
+type TestTable struct {
+	Id   string
+	Name string
+}
+
+func (t TestTable) ToRow() ([]string, error) {
+	row := make([]string, 2)
+	row[0] = t.Id
+	row[1] = t.Name
+	return row, nil
+}
+
+func (t TestTable) FromRow(row []string) (Table, error) {
+	if len(row) < 2 {
+		return nil, errors.New("out of range")
+	}
+	newTable := TestTable{
+		Id:   row[0],
+		Name: row[1],
+	}
+	return newTable, nil
+}
+
 func Test(t *testing.T) {
-	table, err := OpenTable("./test.csv")
+	csv, err := OpenCsv("./test.csv", TestTable{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Log(table.Records)
 	go func() {
-		if err := table.ListenChange(); err != nil {
+		if err := csv.ListenChange(); err != nil {
 			log.Fatalln(err)
 		}
 	}()
-	if err := table.Insert([]string{"name1", "id1", "1,2,3\""}); err != nil {
-		t.Fatal(err)
-	}
-	t.Log(table.Records)
-	if err := table.Insert([]string{"name1", "id2", "4,5,6"}); err != nil {
-		t.Fatal(err)
-	}
-	t.Log(table.Records)
-	value, err := table.Select(1, "id1")
+
+	all, err := csv.All()
 	if err != nil {
-		t.Fatal(value)
+		t.Fatal(err)
 	}
-	t.Log(value)
-	values, err := table.SelectAll(0, "name1")
+	t.Log(all)
+
+	record1 := TestTable{
+		Id:   "1",
+		Name: "abc",
+	}
+	if err := csv.Insert(record1); err != nil {
+		t.Fatal(err)
+	}
+	all, err = csv.All()
 	if err != nil {
-		t.Fatal(value)
-	}
-	t.Log(values)
-	update := []string{"name2", "id1", "1,2,3"}
-	if err := table.Update(1, "id1", update); err != nil {
 		t.Fatal(err)
 	}
-	t.Log(table.Records)
-	if err := table.Delete(1, "id1"); err != nil {
+	t.Log(all)
+
+	record2 := TestTable{
+		Id:   "2",
+		Name: "abc",
+	}
+	if err := csv.Insert(record2); err != nil {
 		t.Fatal(err)
 	}
-	t.Log(table.Records)
-	table.Close()
+	all, err = csv.All()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(all)
+
+	record3 := TestTable{
+		Id:   "3",
+		Name: "def",
+	}
+	if err := csv.Insert(record3); err != nil {
+		t.Fatal(err)
+	}
+	all, err = csv.All()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(all)
+
+	select1, err := csv.Select(0, "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(select1)
+
+	selectAll, err := csv.SelectAll(1, "abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(selectAll)
+
+	record1.Name = "updated abc"
+	if err := csv.Update(0, "1", record1); err != nil {
+		t.Fatal(err)
+	}
+	all, err = csv.All()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(all)
+
+	if err := csv.Delete(0, "2"); err != nil {
+		t.Fatal(err)
+	}
+	all, err = csv.All()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(all)
+
+	csv.Close()
 }

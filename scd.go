@@ -16,7 +16,7 @@ type RecordType interface {
 
 type Table struct {
 	recordType RecordType
-	rawRecords [][]string
+	rows       [][]string
 	file       *os.File
 	changed    chan struct{}
 	close      chan struct{}
@@ -31,7 +31,7 @@ func OpenTable(path string, recordType RecordType) (*Table, error) {
 		return nil, err
 	}
 	reader := csv.NewReader(file)
-	rawRecords, err := reader.ReadAll()
+	rows, err := reader.ReadAll()
 	if err != nil {
 		if err := file.Close(); err != nil {
 			log.Fatalln(err)
@@ -40,7 +40,7 @@ func OpenTable(path string, recordType RecordType) (*Table, error) {
 	}
 	newCsv := &Table{
 		recordType: recordType,
-		rawRecords: rawRecords,
+		rows:       rows,
 		file:       file,
 		changed:    make(chan struct{}),
 		close:      make(chan struct{}),
@@ -65,7 +65,7 @@ func (t *Table) ListenChange() error {
 				if _, err := t.file.Seek(0, 0); err != nil {
 					log.Fatalln(err)
 				}
-				if err := writer.WriteAll(t.rawRecords); err != nil {
+				if err := writer.WriteAll(t.rows); err != nil {
 					log.Fatalln(err)
 				}
 				t.mutex.Unlock()
@@ -89,8 +89,8 @@ func (t *Table) Close() {
 func (t *Table) All() ([]RecordType, error) {
 	res := make([]RecordType, 0)
 	t.mutex.Lock()
-	for i := 0; i < len(t.rawRecords); i++ {
-		record, err := t.recordType.FromRow(t.rawRecords[i])
+	for i := 0; i < len(t.rows); i++ {
+		record, err := t.recordType.FromRow(t.rows[i])
 		if err != nil {
 			return nil, err
 		}
@@ -105,12 +105,12 @@ func (t *Table) All() ([]RecordType, error) {
 // notice that the id must be converted to string in advance. The col starts from 0
 func (t *Table) Select(col int, id string) (RecordType, error) {
 	t.mutex.Lock()
-	for i := 0; i < len(t.rawRecords); i++ {
-		if col >= len(t.rawRecords[i]) {
+	for i := 0; i < len(t.rows); i++ {
+		if col >= len(t.rows[i]) {
 			return nil, FindOutOfIndex
 		}
-		if t.rawRecords[i][col] == id {
-			record, err := t.recordType.FromRow(t.rawRecords[i])
+		if t.rows[i][col] == id {
+			record, err := t.recordType.FromRow(t.rows[i])
 			if err != nil {
 				return nil, err
 			}
@@ -125,12 +125,12 @@ func (t *Table) Select(col int, id string) (RecordType, error) {
 func (t *Table) SelectAll(col int, by string) ([]RecordType, error) {
 	records := make([]RecordType, 0)
 	t.mutex.Lock()
-	for i := 0; i < len(t.rawRecords); i++ {
-		if col >= len(t.rawRecords[i]) {
+	for i := 0; i < len(t.rows); i++ {
+		if col >= len(t.rows[i]) {
 			return nil, FindOutOfIndex
 		}
-		if t.rawRecords[i][col] == by {
-			record, err := t.recordType.FromRow(t.rawRecords[i])
+		if t.rows[i][col] == by {
+			record, err := t.recordType.FromRow(t.rows[i])
 			if err != nil {
 				return nil, err
 			}
@@ -143,12 +143,12 @@ func (t *Table) SelectAll(col int, by string) ([]RecordType, error) {
 
 // Insert a row into the recordType
 func (t *Table) Insert(record RecordType) error {
-	rawRecord, err := record.ToRow()
+	row, err := record.ToRow()
 	if err != nil {
 		return err
 	}
 	t.mutex.Lock()
-	t.rawRecords = append(t.rawRecords, rawRecord)
+	t.rows = append(t.rows, row)
 	t.mutex.Unlock()
 	t.changed <- struct{}{}
 	return nil
@@ -156,16 +156,16 @@ func (t *Table) Insert(record RecordType) error {
 
 // InsertAll rows into the recordType
 func (t *Table) InsertAll(records []RecordType) error {
-	rawRecords := make([][]string, 0)
+	rows := make([][]string, 0)
 	for _, record := range records {
-		rawRecord, err := record.ToRow()
+		row, err := record.ToRow()
 		if err != nil {
 			return err
 		}
-		rawRecords = append(rawRecords, rawRecord)
+		rows = append(rows, row)
 	}
 	t.mutex.Lock()
-	t.rawRecords = append(t.rawRecords, rawRecords...)
+	t.rows = append(t.rows, rows...)
 	t.mutex.Unlock()
 	t.changed <- struct{}{}
 	return nil
@@ -173,18 +173,18 @@ func (t *Table) InsertAll(records []RecordType) error {
 
 // Update a row based on its id, col and id work the same as Select
 func (t *Table) Update(col int, id string, record RecordType) error {
-	rawRecord, err := record.ToRow()
+	row, err := record.ToRow()
 	if err != nil {
 		return err
 	}
 	t.mutex.Lock()
-	for i := 0; i < len(t.rawRecords); i++ {
-		if col >= len(t.rawRecords[i]) {
+	for i := 0; i < len(t.rows); i++ {
+		if col >= len(t.rows[i]) {
 			t.mutex.Unlock()
 			return FindOutOfIndex
 		}
-		if t.rawRecords[i][col] == id {
-			t.rawRecords[i] = rawRecord
+		if t.rows[i][col] == id {
+			t.rows[i] = row
 			t.mutex.Unlock()
 			t.changed <- struct{}{}
 			return nil
@@ -195,19 +195,19 @@ func (t *Table) Update(col int, id string, record RecordType) error {
 
 // UpdateAll rows that has the specified value on the specified column, col and id work the same as Select
 func (t *Table) UpdateAll(col int, by string, record RecordType) error {
-	rawRecord, err := record.ToRow()
+	row, err := record.ToRow()
 	if err != nil {
 		return err
 	}
 	updated := false
 	t.mutex.Lock()
-	for i := 0; i < len(t.rawRecords); i++ {
-		if col >= len(t.rawRecords[i]) {
+	for i := 0; i < len(t.rows); i++ {
+		if col >= len(t.rows[i]) {
 			t.mutex.Unlock()
 			return FindOutOfIndex
 		}
-		if t.rawRecords[i][col] == by {
-			t.rawRecords[i] = rawRecord
+		if t.rows[i][col] == by {
+			t.rows[i] = row
 			updated = true
 		}
 	}
@@ -222,13 +222,13 @@ func (t *Table) UpdateAll(col int, by string, record RecordType) error {
 // Delete a row based on its id, col and id work the same as Select
 func (t *Table) Delete(col int, id string) error {
 	t.mutex.Lock()
-	for i := 0; i < len(t.rawRecords); i++ {
-		if col >= len(t.rawRecords[i]) {
+	for i := 0; i < len(t.rows); i++ {
+		if col >= len(t.rows[i]) {
 			return FindOutOfIndex
 		}
-		if t.rawRecords[i][col] == id {
-			t.rawRecords[i] = t.rawRecords[len(t.rawRecords)-1]
-			t.rawRecords = t.rawRecords[:len(t.rawRecords)-1]
+		if t.rows[i][col] == id {
+			t.rows[i] = t.rows[len(t.rows)-1]
+			t.rows = t.rows[:len(t.rows)-1]
 			t.mutex.Unlock()
 			t.changed <- struct{}{}
 			return nil
@@ -241,13 +241,13 @@ func (t *Table) Delete(col int, id string) error {
 func (t *Table) DeleteAll(col int, by string) error {
 	deleted := false
 	t.mutex.Lock()
-	for i := len(t.rawRecords) - 1; i >= 0; i-- {
-		if col >= len(t.rawRecords[i]) {
+	for i := len(t.rows) - 1; i >= 0; i-- {
+		if col >= len(t.rows[i]) {
 			return FindOutOfIndex
 		}
-		if t.rawRecords[i][col] == by {
-			t.rawRecords[i] = t.rawRecords[len(t.rawRecords)-1]
-			t.rawRecords = t.rawRecords[:len(t.rawRecords)-1]
+		if t.rows[i][col] == by {
+			t.rows[i] = t.rows[len(t.rows)-1]
+			t.rows = t.rows[:len(t.rows)-1]
 			deleted = true
 		}
 	}

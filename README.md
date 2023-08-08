@@ -29,13 +29,13 @@ For detailed API please refer to the go doc
 ### Basic
 
 ```go
-// define your table struct
+// define your RecordType struct
 type My struct{
     Id int64
     Name string
 }
 
-// implement the Table interface
+// implement the RecordType interface
 func (m My) ToRow() ([]string, error) {
     row := make([]string, 2)
     row[0] = strconv.FormatInt(m.Id, 10)
@@ -43,7 +43,7 @@ func (m My) ToRow() ([]string, error) {
     return row, nil
 }
 
-func (m My) FromRow(row []string) (Table, error) {
+func (m My) FromRow(row []string) (RecordType, error) {
     if len(row) < 2 {
         return nil, errors.New("out of range")
     }
@@ -51,11 +51,11 @@ func (m My) FromRow(row []string) (Table, error) {
     if err != nil {
         return nil, err
     }
-    newTable := My{
+    record := My{
         Id:   id,
         Name: row[1],
     }
-    return newTable, nil
+    return record, nil
 }
 
 myCsv, err := OpenCsv("./test.csv", My{})

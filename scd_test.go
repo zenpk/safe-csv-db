@@ -27,11 +27,11 @@ func (t TestRecordType) FromRow(row []string) (RecordType, error) {
 	if err != nil {
 		return nil, err
 	}
-	newTable := TestRecordType{
+	record := TestRecordType{
 		Id:   id,
 		Name: row[1],
 	}
-	return newTable, nil
+	return record, nil
 }
 
 func Test(t *testing.T) {

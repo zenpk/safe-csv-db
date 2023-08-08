@@ -58,11 +58,11 @@ func (m My) FromRow(row []string) (RecordType, error) {
     return record, nil
 }
 
-myCsv, err := OpenCsv("./test.csv", My{})
-defer myCsv.Close()
+tableMy, err := OpenTable("./my.csv", My{})
+defer tableMy.Close()
 
 go func() {
-    if err := myCsv.ListenChange(); err != nil {
+    if err := tableMy.ListenChange(); err != nil {
         log.Fatalln(err)
     }
 }()
@@ -71,7 +71,7 @@ record := My{
     Id:   1,
     Name: "abc",
 }
-if err := csv.Insert(record); err != nil {
+if err := tableMy.Insert(record); err != nil {
     log.Fatalln(err)
 }
 ```
@@ -80,20 +80,20 @@ if err := csv.Insert(record); err != nil {
 
 ```go
 func InitDb(ready, done chan struct{}) {
-    userCsv, err := OpenCsv("./users.csv", User{})
-    defer userCsv.Close()
+    tableUser, err := OpenTable("./users.csv", User{})
+    defer tableUser.Close()
 
     go func() {
-        if err := userCsv.ListenChange(); err != nil {
+        if err := tableUser.ListenChange(); err != nil {
             log.Fatalln(err)
         }
     }()
 
-    articleCsv, err := OpenCsv("./articles.csv", Article{})
-    defer articleCsv.Close()
+    tableArticle, err := OpenTable("./articles.csv", Article{})
+    defer tableArticle.Close()
 
     go func() {
-        if err := articleCsv.ListenChange(); err != nil {
+        if err := tableArticle.ListenChange(); err != nil {
             log.Fatalln(err)
         }
     }()

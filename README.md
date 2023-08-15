@@ -63,7 +63,7 @@ defer tableMy.Close()
 
 go func() {
     if err := tableMy.ListenChange(); err != nil {
-        log.Fatalln(err)
+        panic(err)
     }
 }()
 
@@ -72,7 +72,7 @@ record := My{
     Name: "abc",
 }
 if err := tableMy.Insert(record); err != nil {
-    log.Fatalln(err)
+    panic(err)
 }
 ```
 
@@ -85,7 +85,7 @@ func InitDb(ready, done chan struct{}) {
 
     go func() {
         if err := tableUser.ListenChange(); err != nil {
-            log.Fatalln(err)
+            panic(err)
         }
     }()
 
@@ -94,7 +94,7 @@ func InitDb(ready, done chan struct{}) {
 
     go func() {
         if err := tableArticle.ListenChange(); err != nil {
-            log.Fatalln(err)
+            panic(err)
         }
     }()
 

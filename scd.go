@@ -150,7 +150,11 @@ func (t *Table) Insert(record RecordType) error {
 	t.mutex.Lock()
 	t.rows = append(t.rows, row)
 	t.mutex.Unlock()
-	t.changed <- struct{}{}
+	// use select to avoid channel block
+	select {
+	case t.changed <- struct{}{}:
+	default:
+	}
 	return nil
 }
 
@@ -167,7 +171,11 @@ func (t *Table) InsertAll(records []RecordType) error {
 	t.mutex.Lock()
 	t.rows = append(t.rows, rows...)
 	t.mutex.Unlock()
-	t.changed <- struct{}{}
+	// use select to avoid channel block
+	select {
+	case t.changed <- struct{}{}:
+	default:
+	}
 	return nil
 }
 
@@ -185,7 +193,11 @@ func (t *Table) Update(col int, id string, record RecordType) error {
 		}
 		if t.rows[i][col] == id {
 			t.rows[i] = row
-			t.changed <- struct{}{}
+			// use select to avoid channel block
+			select {
+			case t.changed <- struct{}{}:
+			default:
+			}
 			return nil
 		}
 	}
@@ -211,7 +223,11 @@ func (t *Table) UpdateAll(col int, by string, record RecordType) error {
 		}
 	}
 	if updated {
-		t.changed <- struct{}{}
+		// use select to avoid channel block
+		select {
+		case t.changed <- struct{}{}:
+		default:
+		}
 		return nil
 	}
 	return ValueNotFound
@@ -228,7 +244,11 @@ func (t *Table) Delete(col int, id string) error {
 		if t.rows[i][col] == id {
 			t.rows[i] = t.rows[len(t.rows)-1]
 			t.rows = t.rows[:len(t.rows)-1]
-			t.changed <- struct{}{}
+			// use select to avoid channel block
+			select {
+			case t.changed <- struct{}{}:
+			default:
+			}
 			return nil
 		}
 	}
@@ -251,7 +271,11 @@ func (t *Table) DeleteAll(col int, by string) error {
 		}
 	}
 	if deleted {
-		t.changed <- struct{}{}
+		// use select to avoid channel block
+		select {
+		case t.changed <- struct{}{}:
+		default:
+		}
 		return nil
 	}
 	return ValueNotFound

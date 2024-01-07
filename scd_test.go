@@ -2,7 +2,6 @@ package scd
 
 import (
 	"errors"
-	"log"
 	"strconv"
 	"testing"
 )
@@ -41,7 +40,7 @@ func Test(t *testing.T) {
 	}
 	go func() {
 		if err := table.ListenChange(); err != nil {
-			log.Fatalln(err)
+			panic(err)
 		}
 	}()
 

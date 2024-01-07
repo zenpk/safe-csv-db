@@ -41,7 +41,7 @@ func OpenTable(path string, recordType RecordType) (*Table, error) {
 		recordType: recordType,
 		rows:       rows,
 		file:       file,
-		changed:    make(chan struct{}),
+		changed:    make(chan struct{}, 1),
 		close:      make(chan struct{}),
 		mutex:      sync.Mutex{},
 	}
@@ -57,13 +57,13 @@ func (t *Table) ListenChange() error {
 			writer := csv.NewWriter(t.file)
 			t.mutex.Lock()
 			if err := t.file.Truncate(0); err != nil {
-				log.Fatalln(err)
+				panic(err)
 			}
 			if _, err := t.file.Seek(0, 0); err != nil {
-				log.Fatalln(err)
+				panic(err)
 			}
 			if err := writer.WriteAll(t.rows); err != nil {
-				log.Fatalln(err)
+				panic(err)
 			}
 			t.mutex.Unlock()
 		case <-t.close:
@@ -81,6 +81,7 @@ func (t *Table) Close() {
 func (t *Table) All() ([]RecordType, error) {
 	res := make([]RecordType, 0)
 	t.mutex.Lock()
+	defer t.mutex.Unlock()
 	for i := 0; i < len(t.rows); i++ {
 		record, err := t.recordType.FromRow(t.rows[i])
 		if err != nil {
@@ -88,7 +89,6 @@ func (t *Table) All() ([]RecordType, error) {
 		}
 		res = append(res, record)
 	}
-	t.mutex.Unlock()
 	return res, nil
 }
 
@@ -97,6 +97,7 @@ func (t *Table) All() ([]RecordType, error) {
 // notice that the id must be converted to string in advance. The col starts from 0
 func (t *Table) Select(col int, id string) (RecordType, error) {
 	t.mutex.Lock()
+	defer t.mutex.Unlock()
 	for i := 0; i < len(t.rows); i++ {
 		if col >= len(t.rows[i]) {
 			return nil, FindOutOfIndex
@@ -106,7 +107,6 @@ func (t *Table) Select(col int, id string) (RecordType, error) {
 			if err != nil {
 				return nil, err
 			}
-			t.mutex.Unlock()
 			return record, nil
 		}
 	}
@@ -117,6 +117,7 @@ func (t *Table) Select(col int, id string) (RecordType, error) {
 func (t *Table) SelectAll(col int, by string) ([]RecordType, error) {
 	records := make([]RecordType, 0)
 	t.mutex.Lock()
+	defer t.mutex.Unlock()
 	for i := 0; i < len(t.rows); i++ {
 		if col >= len(t.rows[i]) {
 			return nil, FindOutOfIndex
@@ -129,7 +130,6 @@ func (t *Table) SelectAll(col int, by string) ([]RecordType, error) {
 			records = append(records, record)
 		}
 	}
-	t.mutex.Unlock()
 	return records, nil
 }
 
@@ -142,7 +142,11 @@ func (t *Table) Insert(record RecordType) error {
 	t.mutex.Lock()
 	t.rows = append(t.rows, row)
 	t.mutex.Unlock()
-	t.changed <- struct{}{}
+	// use select to avoid channel block
+	select {
+	case t.changed <- struct{}{}:
+	default:
+	}
 	return nil
 }
 
@@ -159,7 +163,11 @@ func (t *Table) InsertAll(records []RecordType) error {
 	t.mutex.Lock()
 	t.rows = append(t.rows, rows...)
 	t.mutex.Unlock()
-	t.changed <- struct{}{}
+	// use select to avoid channel block
+	select {
+	case t.changed <- struct{}{}:
+	default:
+	}
 	return nil
 }
 
@@ -170,15 +178,18 @@ func (t *Table) Update(col int, id string, record RecordType) error {
 		return err
 	}
 	t.mutex.Lock()
+	defer t.mutex.Unlock()
 	for i := 0; i < len(t.rows); i++ {
 		if col >= len(t.rows[i]) {
-			t.mutex.Unlock()
 			return FindOutOfIndex
 		}
 		if t.rows[i][col] == id {
 			t.rows[i] = row
-			t.mutex.Unlock()
-			t.changed <- struct{}{}
+			// use select to avoid channel block
+			select {
+			case t.changed <- struct{}{}:
+			default:
+			}
 			return nil
 		}
 	}
@@ -193,9 +204,9 @@ func (t *Table) UpdateAll(col int, by string, record RecordType) error {
 	}
 	updated := false
 	t.mutex.Lock()
+	defer t.mutex.Unlock()
 	for i := 0; i < len(t.rows); i++ {
 		if col >= len(t.rows[i]) {
-			t.mutex.Unlock()
 			return FindOutOfIndex
 		}
 		if t.rows[i][col] == by {
@@ -203,9 +214,12 @@ func (t *Table) UpdateAll(col int, by string, record RecordType) error {
 			updated = true
 		}
 	}
-	t.mutex.Unlock()
 	if updated {
-		t.changed <- struct{}{}
+		// use select to avoid channel block
+		select {
+		case t.changed <- struct{}{}:
+		default:
+		}
 		return nil
 	}
 	return ValueNotFound
@@ -214,6 +228,7 @@ func (t *Table) UpdateAll(col int, by string, record RecordType) error {
 // Delete a row based on its id, col and id work the same as Select
 func (t *Table) Delete(col int, id string) error {
 	t.mutex.Lock()
+	defer t.mutex.Unlock()
 	for i := 0; i < len(t.rows); i++ {
 		if col >= len(t.rows[i]) {
 			return FindOutOfIndex
@@ -221,8 +236,11 @@ func (t *Table) Delete(col int, id string) error {
 		if t.rows[i][col] == id {
 			t.rows[i] = t.rows[len(t.rows)-1]
 			t.rows = t.rows[:len(t.rows)-1]
-			t.mutex.Unlock()
-			t.changed <- struct{}{}
+			// use select to avoid channel block
+			select {
+			case t.changed <- struct{}{}:
+			default:
+			}
 			return nil
 		}
 	}
@@ -233,6 +251,7 @@ func (t *Table) Delete(col int, id string) error {
 func (t *Table) DeleteAll(col int, by string) error {
 	deleted := false
 	t.mutex.Lock()
+	defer t.mutex.Unlock()
 	for i := len(t.rows) - 1; i >= 0; i-- {
 		if col >= len(t.rows[i]) {
 			return FindOutOfIndex
@@ -243,9 +262,12 @@ func (t *Table) DeleteAll(col int, by string) error {
 			deleted = true
 		}
 	}
-	t.mutex.Unlock()
 	if deleted {
-		t.changed <- struct{}{}
+		// use select to avoid channel block
+		select {
+		case t.changed <- struct{}{}:
+		default:
+		}
 		return nil
 	}
 	return ValueNotFound

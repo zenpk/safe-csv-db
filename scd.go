@@ -20,7 +20,6 @@ type Table struct {
 	file       *os.File
 	changed    chan struct{}
 	close      chan struct{}
-	closed     chan error
 	mutex      sync.Mutex
 }
 
@@ -44,7 +43,6 @@ func OpenTable(path string, recordType RecordType) (*Table, error) {
 		file:       file,
 		changed:    make(chan struct{}),
 		close:      make(chan struct{}),
-		closed:     make(chan error),
 		mutex:      sync.Mutex{},
 	}
 	return newCsv, nil
@@ -53,31 +51,25 @@ func OpenTable(path string, recordType RecordType) (*Table, error) {
 // ListenChange listen to recordType change signal, whenever a change happens and the recordType is idle,
 // writes the records to the csv file. This function will return an error after the recordType is closed
 func (t *Table) ListenChange() error {
-	go func() {
-		for {
-			select {
-			case <-t.changed:
-				writer := csv.NewWriter(t.file)
-				t.mutex.Lock()
-				if err := t.file.Truncate(0); err != nil {
-					log.Fatalln(err)
-				}
-				if _, err := t.file.Seek(0, 0); err != nil {
-					log.Fatalln(err)
-				}
-				if err := writer.WriteAll(t.rows); err != nil {
-					log.Fatalln(err)
-				}
-				t.mutex.Unlock()
-			case <-t.close:
-				err := t.file.Close()
-				t.closed <- err
-				return
+	for {
+		select {
+		case <-t.changed:
+			writer := csv.NewWriter(t.file)
+			t.mutex.Lock()
+			if err := t.file.Truncate(0); err != nil {
+				log.Fatalln(err)
 			}
+			if _, err := t.file.Seek(0, 0); err != nil {
+				log.Fatalln(err)
+			}
+			if err := writer.WriteAll(t.rows); err != nil {
+				log.Fatalln(err)
+			}
+			t.mutex.Unlock()
+		case <-t.close:
+			return t.file.Close()
 		}
-	}()
-	err := <-t.closed
-	return err
+	}
 }
 
 // Close the recordType (csv file)

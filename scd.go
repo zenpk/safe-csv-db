@@ -74,7 +74,7 @@ func (t *Table) ListenChange() error {
 
 // Close the recordType (csv file)
 func (t *Table) Close() {
-	t.close <- struct{}{}
+	close(t.close)
 }
 
 // All returns all rows

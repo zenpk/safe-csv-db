@@ -79,7 +79,7 @@ if err := tableMy.Insert(record); err != nil {
 ### Call from other functions
 
 ```go
-func InitDb(ready, done chan struct{}) {
+func InitDb(preparing chan<- struct{}, stop <-chan struct{}) {
     tableUser, err := OpenTable("./users.csv", User{})
     defer tableUser.Close()
 
@@ -98,16 +98,16 @@ func InitDb(ready, done chan struct{}) {
         }
     }()
 
-    ready <- struct{}{}
-    <- done
+    close(preparing)
+    <- stop
 }
 
 func main() {
-    ready := make(chan struct{})
-    done := make(chan struct{})
-    go InitDb(done, ready)
-    <- ready
+    preparing := make(chan struct{})
+    stop := make(chan struct{})
+    go InitDb(preparing, stop)
+    <- preparing
     // do something
-    done <- struct{}{}
+    close(stop)
 }
 ```
